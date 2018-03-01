@@ -1,7 +1,7 @@
 function [REXData, varargout] =LoadRex_MergeSpk2_fixTrigs(rexName)
 
 % Given the name of some Rex data files (the A and E files,
-% without the ‘A’ or ‘E’ on the end), attempts a conversion of this data
+% without the â€˜Aâ€™ or â€˜Eâ€™ on the end), attempts a conversion of this data
 % into a Matlab file that contains all spike, code, saccade, and other
 % data.
 % Loads data exported from Spike2 and adds/replaces spike times, unit IDs and waveforms
@@ -57,21 +57,14 @@ eval(['Spk2Data = ' cell2mat(varlist(cellfun(@isempty,strfind(chName,'trigger'))
 eval(['Spk2Trig = ' cell2mat(varlist(~cellfun(@isempty,strfind(chName,'trigger')))) ';']);
 nClus = unique(Spk2Data.codes(:,1));
 
-% find which triggers are the trial starts
+% Extract received triggers from Spike2
 SyncTrigs=int32(round((Spk2Trig.times-Spk2Trig.times(1))*1000));
-% Extract triggers from REXData
+
+% Extract sent triggers from REXData
 allTrigs = [];
 for n = 1:length(REXData)
     codes = [REXData(n).Events.Code];
     times = [REXData(n).Events.Time];
-    
-    % This klooge is not needed for files recorded after 9/1/2016
-    % (previously, a second trigger code was not dropped on error trials
-    % and the error code had to be used as a surrogate
-%     trigsReal = times(codes==1502)';
-%     trigsErr = times(codes==17385)' + 2;
-%     trigs = sort([trigsReal; trigsErr]);
-
     trigs = times(codes==1502)';
     trigsPerTrial(n,1) = length(trigs);
     allTrigs = [allTrigs; trigs];
@@ -79,41 +72,55 @@ end
 allTrigs = allTrigs - allTrigs(1);
 
 % Compare differences in triggers!
-minIter = min(length(allTrigs), length(SyncTrigs));
-maxIter = max(length(allTrigs), length(SyncTrigs));
-RexTrigs = double(allTrigs);
-Sp2Trigs = double(SyncTrigs);
-AdjSp2Trigs = double(SyncTrigs);
-rexCounter = 1;
-sp2Counter = 1;
+minIter = min(length(allTrigs), length(SyncTrigs)); % smaller number of triggers
+maxIter = max(length(allTrigs), length(SyncTrigs)); % larger number of triggers
+RexTrigs = double(allTrigs); % sent trigger times
+Sp2Trigs = double(SyncTrigs); % received trigger times
+AdjSp2Trigs = double(SyncTrigs); % received trigger times that need to be adjusted or removed
+rexCounter = 1; % counter for number of sent triggers processed
+sp2Counter = 1; % counter for number of received triggers processed
+% step through all triggers
 for k = 1:maxIter;
+    % if we've hit our number of sent triggers, then we're done early
     if rexCounter>size(RexTrigs)
         break
     end
+    % keep track of the running offset (deviation) between sent and received trigs
     rawOffset(k) = RexTrigs(rexCounter) - AdjSp2Trigs(sp2Counter);
-    if abs(rawOffset(k))<=7 % correct minor deviations in Adjusted only
+    
+    % if the offset is less than 7ms (for instance, due to drift or analog-digital conversion differences) 
+    if abs(rawOffset(k))<=7 
+        % then adjust the received trigger times as needed (to prevent drift from building up)
         AdjSp2Trigs(sp2Counter:end) = AdjSp2Trigs(sp2Counter:end) + rawOffset(k);
+        % and increment both counters
         rexCounter = rexCounter + 1;
         sp2Counter = sp2Counter + 1;
-    elseif abs(rawOffset(k))>5 % bad triggering
-        if rawOffset(k)>0 % extra trigger(s) in Spike2
+        
+    % if the offset is >7ms, there must have been a phantom trigger
+    elseif abs(rawOffset(k))>7
+        if rawOffset(k)>0 % positive offset = extra received trigger
+            % mark that trigger time with a NaN
             AdjSp2Trigs(sp2Counter) = NaN;
             fprintf('Extra Spike2 trigger found: %i\n', sp2Counter)
-            sp2Counter = sp2Counter + 1; % keep rexCounter to try and find a new match for it
+            % increment counter for received triggers but not sent triggers (rexCounter)
+            sp2Counter = sp2Counter + 1;
         end
-        if rawOffset(k)<0 % missing trigger(s) in Spike2 -> should never happen -> deliver error
+        if rawOffset(k)<0 % negative offset = extra sent trigger -> should never happen -> deliver error
             error('There are triggers missing from Spike2, which this code is not currently equipped to handle.')
         end
     end
 end
+
+% let user know how many triggers were removed
 if sp2Counter ~= rexCounter
     warning('%i extra triggers found and removed from %st.mat.\n', sp2Counter-rexCounter, filename)
 end
-newSp2Trigs = Sp2Trigs(~isnan(AdjSp2Trigs));
-newAdjSp2Trigs = AdjSp2Trigs(~isnan(AdjSp2Trigs));
 
-%plot(RexTrigs - newSp2Trigs)
-SyncTrigs = newSp2Trigs; % rewriting!
+% update received trigger times: remove the NaN triggers, but retain the non-adjusted trigger times (important!)
+newSp2Trigs = Sp2Trigs(~isnan(AdjSp2Trigs));
+
+% rewrite using the standard variable name
+SyncTrigs = newSp2Trigs;
 
 % TrialTimes=sort([[REXData.aStartTime] [REXData.aEndTime]]);
 TrialTimes=sort([REXData.tStartTime]);
