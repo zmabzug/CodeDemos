@@ -2,18 +2,12 @@ function [perf_valid Ptrain Ptest] = logitESthirds(binrast, truth)
 % Implementing early stopping for logistic regression. Input binned spike
 % counts and truths for trial conditions.
 
-
-% binrast =binrast - ones(size(binrast,1),1)*mean(binrast);
-% CC=cov(binrast);
-% binrast = binrast*pinv(sqrtm(CC));
-
 [nTrials nBins] = size(binrast);
 numreps = 20;
 
 for n = 1:numreps;    
     % Initialize weights to zero and add constant to bins
     gma = 0.03;
-    %W = zeros(nBins+1,1)'; 
     W = randn(nBins+1,1)';
     smallbin = [ones(nTrials,1) binrast];
     max_iter = 2000;
@@ -29,13 +23,10 @@ for n = 1:numreps;
     testkey = truth(idx(thirdTrials+1:2*thirdTrials));
     trainkey = truth(idx(2*thirdTrials+1:end));
 
-%    pinvCstatic = inv(diag(diag(-train'*train/4))); % non-conjugate (constant) gradient
-
     % Iterate
-    for iter = 1:max_iter;
+    for iter = 1:max_iter
         % For test data: calculate log-prob
         wdx_test = test*W';
-%        lp_test = sum(testkey.*wdx_test - log(1 + exp(wdx_test))); 
         lp_test = 1+log2(exp(1))*mean(testkey.*wdx_test - log(1 + exp(wdx_test))); % mutual information (in bits)
 
         % For training data: calculate log-prob, gradient, double gradient
@@ -47,8 +38,6 @@ for n = 1:numreps;
 
         % Update weights
         Wtemp = W - (gma.*pinv(DDlp_train)*Dlp_train')';
-%        Wtemp = W - (gma.*pinvCstatic*Dlp_train')'; % non-conjugate
-%        gradient
 
         % For test data: calculate new log-prob
         wdx_test = test*Wtemp';
@@ -58,7 +47,6 @@ for n = 1:numreps;
         logprobtrain(iter) = lp_train;
         logprobtest(iter) = lp_test;
         prob_train = exp(trainkey.*(train*W'))./(1 + exp(train*W')); % P(Y=y|x)
-        % prob_train = exp(1.*(train*W'))./(1 + exp(train*W')); % P(Y=1|x)
         prob_test = exp(testkey.*(test*W'))./(1 + exp(test*W'));
         pred_train = round(prob_train);
         pred_test = round(prob_test);
@@ -70,10 +58,9 @@ for n = 1:numreps;
             break
         else W = Wtemp;
         end   
-%         W = Wtemp;
         
         % End if max_iter is reached
-        if iter == max_iter;
+        if iter == max_iter
             disp('Max iter reached')
         end
     end
