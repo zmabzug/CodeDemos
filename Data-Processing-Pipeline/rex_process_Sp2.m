@@ -7,14 +7,17 @@ function [] = rex_process_Sp2(human, monkey, varargin)
 % autoRewrite = 1 to automatically re-write any processed data files
 % without asking for confirmation [autoRewrite = 0 by default].
 
+% here, we can accomodate different root directories (depending on the user and their computer)
 if strcmp(human, 'Zack')
     root = '~/Desktop/zackdata/';
 end
 
+% and different data folders, depending on the animal the data came from
 if strcmp(monkey, 'Muzzy')
     folder = 'Muzzy/';
 end
 
+% check and see if the user wants to automatically rewrite files (if necessary), or if they want to be prompted each time
 autoRewrite = 0;
 if isa(varargin{end}, 'double')
     if varargin{end}==1
@@ -24,6 +27,7 @@ if isa(varargin{end}, 'double')
     varargin = varargin(1:end-1);
 end
 
+% step through each file that the user wants to process
 for n=1:length(varargin);
     filename = varargin{n};
     
@@ -32,6 +36,7 @@ for n=1:length(varargin);
     newfilename = [processedFolder filename '_Sp2.mat'];
     rexname = [filename '_Sp2'];
     
+    % if necessary, prompt the user to ask if they want to rewrite files
     if exist(newfilename) & ~autoRewrite
         prompt = [rexname ' already exists in ' processedFolder '. Re-write data file (y/n)?\n'];
         response = input(prompt, 's');
@@ -41,15 +46,17 @@ for n=1:length(varargin);
         end
     end
             
-    %% Load data using mrdr
+    %% Load behavioral and neuro data, and fix trigger timing if needed!
     [data, ~, clusters] = LoadRex_MergeSpk2_fixTrigs([root folder filename]);
     
-    %% Convert data.Events to allcodes and alltimes
+    %% Convert raw behavioral data (data.Events) to matrices of trial events (allcodes) and timing (alltimes)
     allcodes = [];
     alltimes = [];
     allh = [];
     allv = [];
     spikes = cell(length(clusters),1);
+    
+    % step through each trial
     for t=1:length(data)
         rawCodes = double([data(t).Events.Code]); % Extract codes
         theseCodes = rawCodes(rawCodes>=1000); % Only take real codes (no 1, 2, 800, 801, etc.)
@@ -64,10 +71,13 @@ for n=1:length(varargin);
             theseTimes = theseTimes(2:end);
         end
         
+        % save data into matrices
         allcodes = cat_variable_size_row(allcodes, theseCodes);
         alltimes = cat_variable_size_row(alltimes, theseTimes);
         allh = cat_variable_size_row(allh, data(t).Signals(1).Signal);
         allv = cat_variable_size_row(allv, data(t).Signals(2).Signal);
+        
+        % extract neuro data from multiple neurons
         for c = 1:length(clusters);
             oldSpikes = spikes{c};
             newSpikes = data(t).SpikeTimes(data(t).Units==clusters(c))';
