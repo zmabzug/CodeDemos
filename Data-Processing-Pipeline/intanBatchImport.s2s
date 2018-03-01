@@ -1,0 +1,133 @@
+#include "ghutils.s2s"                          ' include library of useful script functions
+FileClose(-1);
+var dll$:="binary";
+var p$:=Filepath$(-3);
+var key$:="batchimp";
+var flag%:=4;                                              ' 4: show import progress bar;    0: just do it.
+var minch%:=1;                                             ' number of channels to create in destination file 
+
+''''' First get config file'
+var cfg$[1],oldp$,nf%;
+
+oldp$:=FilePath$();                                 ' get current directory
+FilePathSet(p$);                                    ' change to directory holding config files
+nf%:=FileList(cfg$[],-1,"*.icfx");                  ' list available config files
+resize cfg$[nf%];
+FileList(cfg$[],-1,"*.icfx");
+FilePathSet(oldp$); 
+
+''''' Now fill in known parameters
+var cfgndx%:=0;
+var dtype%:=2;
+var bigend%:=0;
+var nchans%:=1;
+var srate:=20000;
+var ttllst$:="Intan";
+var unitslst$:="V";
+var bin$,cmd$;
+
+bin$:=Print$("%d,%d,%d,%d,%.2f,\"%s\",\"%s\"",cfgndx%,dtype%,bigend%,nchans%,srate,ttllst$,unitslst$); ' pack binary import parameters into a string
+Profile(key$,"binaryimp",bin$);                     ' save string to registry
+cmd$:=Print$("conf=%s%s;Bigend=%d;Type=%d;Rate=%.2f;Chans=%d;Names=%s;Units=%s; dll=%s; ",p$,cfg$[cfgndx%],bigend%,dtype%,srate,nchans%,ttllst$,unitslst$,dll$); ' binary importer
+
+''''' Pick folder to process
+var ok%,rpath$;
+
+ok%:=FilePathSet("",0,"Select Source folder");
+rpath$:=FilePath$();                                    ' store the chosen path.
+
+''''' Get basefilename ready by deleting day/time info
+var strlen := Len(rpath$);
+var basefiletemp$ := Left$(rpath$, strlen-15);
+var basefile$ := Right$(basefiletemp$, 13);
+
+''''' Import amp-A-0## files
+var flst$[2],nff%,i%,err%,mask$;
+
+mask$:="amp*.dat";                            ' amp files
+nff%:=FileList(flst$[],-1,mask$);               ' find number of file
+'-------------------------
+'nff%:=1;'''''''''''''''''
+'-------------------------
+resize flst$[nff%];
+FileList(flst$[],-1,mask$);
+var smr$[nff%];
+for i%:=0 to nff%-1 do                           ' import each file
+    smr$[i%]:=FileConvert$(flst$[i%],"",flag%,err%,cmd$ ,minch%); ' all other importers
+next;
+
+''''' Import DIN-00 and convert to Event+
+var smrD$;
+var DIN$:="board-DIN-00.dat";
+var dig%;
+
+smrD$:=FileConvert$(DIN$,"",flag%,err%,cmd$,minch%);
+dig%:=FileOpen(smrD$,0);
+
+var v12% := ViewFind("board-DIN-00");
+var ch1%; 'MemChan created channel
+ch1% := MemChan(3); 'Add new Event+ channel
+MemImport(ch1%, 1, 0.0, MaxTime(),2,0.01,1.0); 'Level rising
+ChanDelete(1);
+MemSave(ch1%,1);
+ChanShow(1); 'Make it visible
+ChanTitle$(1,"trig");
+FileSave();
+FileClose(-1);
+
+''''' Load each amp file and filter
+var j%,handle[nff%];
+var filtered%;
+var low% := 300;
+var high% := 9000;
+
+for j%:=0 to nff%-1 do
+    handle[j%]:=FileOpen(smr$[j%],0);
+    
+    var seglength% := 10; 'Examine seglength% seconds of signal at a time
+    var seg% := Ceil(MaxTime(1)/seglength%); ' How many seglength% second long pieces?
+    
+    filtered% := MemChan(1,0,Binsize(1));
+    var iter%, tempfiltered%;    
+    for iter% := 1 to seg% do
+        ' Filter the raw signal
+        tempfiltered% := filterrawseg(1,low%,high%,seglength%*(iter%-1),seglength%*iter%);          '... save a filtered version of channel 1 to it.
+        MemImport(filtered%, tempfiltered%, 0, MaxTime());  'Copy data
+        ChanDelete(tempfiltered%);
+    next;
+    
+    ChanDelete(1);
+    MemSave(filtered%,1);
+    ChanShow(1);
+    ChanDelete(filtered%);
+    
+    ' Merge
+    var fh% := FileOpen("board-DIN-00.smrx", 0, 0);
+    var code:=ChanSave(1, 2, handle[j%], 0, MaxTime());
+    FrontView(handle[j%]);
+    ChanShow(2);
+    
+    ' Save as
+    var suffix$ := Right$(smr$[j%], 8);
+    var newfilename$ := Print$("%s%s_A%s", rpath$, basefile$, suffix$);
+    var success;
+
+    FileClose(-1);
+    
+    success := FileCopy(smr$[j%], newfilename$, 1);
+
+    FileDelete(smr$[j%]);
+    var cfgfile$ := Left$(smr$[j%], 9);
+    var cfgfilefull$ := Print$("%s.s2rx", cfgfile$);
+    FileDelete(cfgfilefull$);
+next;
+
+FileDelete("board-DIN-00.smrx");
+FileDelete("board-DIN-00.s2rx");
+
+''''' Filtering function from Radu
+func filterrawseg(src%, low%, high%,start%,stop%)
+IIRCreate(-1, 2, 0, 4, low%, high%); 'IIR Band pass Butterworth 0.3 to 9 kHz, fourth order
+var dest% := IIRApply(-1, 0, src%, start%, stop%, 1); 'Apply created filter to a new channel
+return dest%;
+end
