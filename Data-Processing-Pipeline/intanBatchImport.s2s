@@ -16,7 +16,7 @@ resize cfg$[nf%];
 FileList(cfg$[],-1,"*.icfx");
 FilePathSet(oldp$); 
 
-''''' Now fill in known parameters
+''''' Now fill in known recording parameters
 var cfgndx%:=0;
 var dtype%:=2;
 var bigend%:=0;
@@ -41,7 +41,7 @@ var strlen := Len(rpath$);
 var basefiletemp$ := Left$(rpath$, strlen-15);
 var basefile$ := Right$(basefiletemp$, 13);
 
-''''' Import amp-A-0## files
+''''' Import neuro recording (amp-A-0##) files
 var flst$[2],nff%,i%,err%,mask$;
 
 mask$:="amp*.dat";                            ' amp files
@@ -56,7 +56,7 @@ for i%:=0 to nff%-1 do                           ' import each file
     smr$[i%]:=FileConvert$(flst$[i%],"",flag%,err%,cmd$ ,minch%); ' all other importers
 next;
 
-''''' Import DIN-00 and convert to Event+
+''''' Import analog trigger file (DIN-00) and convert to digital Event+
 var smrD$;
 var DIN$:="board-DIN-00.dat";
 var dig%;
@@ -64,6 +64,7 @@ var dig%;
 smrD$:=FileConvert$(DIN$,"",flag%,err%,cmd$,minch%);
 dig%:=FileOpen(smrD$,0);
 
+''''' Store channel in memory and create events based on rising edge of trigger pulse
 var v12% := ViewFind("board-DIN-00");
 var ch1%; 'MemChan created channel
 ch1% := MemChan(3); 'Add new Event+ channel
@@ -75,7 +76,7 @@ ChanTitle$(1,"trig");
 FileSave();
 FileClose(-1);
 
-''''' Load each amp file and filter
+''''' Load each neuro recording (amp-A) file and apply digital bandpass filter
 var j%,handle[nff%];
 var filtered%;
 var low% := 300;
@@ -84,6 +85,7 @@ var high% := 9000;
 for j%:=0 to nff%-1 do
     handle[j%]:=FileOpen(smr$[j%],0);
     
+    ''''Split file up into segments to avoid memory errors
     var seglength% := 10; 'Examine seglength% seconds of signal at a time
     var seg% := Ceil(MaxTime(1)/seglength%); ' How many seglength% second long pieces?
     
@@ -92,6 +94,8 @@ for j%:=0 to nff%-1 do
     for iter% := 1 to seg% do
         ' Filter the raw signal
         tempfiltered% := filterrawseg(1,low%,high%,seglength%*(iter%-1),seglength%*iter%);          '... save a filtered version of channel 1 to it.
+        
+        ' Add newest filtered segment to already filtered data
         MemImport(filtered%, tempfiltered%, 0, MaxTime());  'Copy data
         ChanDelete(tempfiltered%);
     next;
@@ -101,7 +105,7 @@ for j%:=0 to nff%-1 do
     ChanShow(1);
     ChanDelete(filtered%);
     
-    ' Merge
+    ' Merge recordings (amp-A) and trigger (DIN-00) into one file
     var fh% := FileOpen("board-DIN-00.smrx", 0, 0);
     var code:=ChanSave(1, 2, handle[j%], 0, MaxTime());
     FrontView(handle[j%]);
