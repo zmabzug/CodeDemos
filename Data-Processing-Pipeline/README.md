@@ -1,5 +1,4 @@
 ## Data-Processing-Pipeline
-_This README is a work in progress._
 
 Welcome! This file contains code samples in MATLAB and the [Spike2 scripting language](http://ced.co.uk/products/spkdpsl) that I needed to write in order to integrate new hardware and software technologies into our existing data acquisition and processing pipeline. Unfortunately, all of these files require either specialized software or large numbers of supporting functions in order to run, so they are for viewing only. If you'd like to see a demo of this code in action, please contact me!
 
