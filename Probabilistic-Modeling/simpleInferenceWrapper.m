@@ -6,6 +6,7 @@ function [] = simpleInferenceWrapper(varargin)
 % '-noLapse'
 % '-useBias'
 
+% parse inputs
 if nargin==0
     clear; clear global; clc;
     modelName = 'full';
@@ -25,6 +26,7 @@ if nargin>2
     fillNewSubjects = varargin{3};
 end
 
+% define directories
 subjectFilesOld = dir('../../Psychtoolbox/Results/Subjects/processed/*.mat');
 nSubjectsOld = length(subjectFilesOld);
 subjectFilesNew = dir('../../Psychtoolbox/JoystickResults/Subjects/*.mat');
@@ -38,10 +40,11 @@ zackData = ~cellfun('isempty', strfind({subjectFiles.name}', 'ZA'));
 %% select model
 % 'full', 'sizeOnly', 'rewardOnly', 'full-sameAlpha', 'dumbSize'
 
+% determine filename, upper and lower parameter bounds, etc. from model name
 [filename, LB, UB, params] = getModelParams(modelName);
 nParams = length(LB);
 
-%%
+%% if we're filling new subjects, we need to make sure to not rewrite old subjects
 if fillNewSubjects
     load('fits-dumbBias0.mat')
     nOldDone = sum(isnan(results.bestFits(:,2)));
@@ -87,6 +90,7 @@ for sid = 1:nSubjects
         continue
     end
     
+    % load subject data
     if sid<=nSubjectsOld
         data_dir = '../../Psychtoolbox/Results/Subjects/processed/';
         load([data_dir subjectFiles(sid).name]);
@@ -110,8 +114,9 @@ for sid = 1:nSubjects
     end
     nTrials(sid) = size(data,1);
     
-    % alpha, beta, kappa, lambda, lapse
     sid
+    
+    % run multiple (nRun) times and store all data
     parfor k = 1:nRuns
         inits = LB + (UB-LB).*rand(1,nParams);
         opts = optimset('Display', 'none', 'MaxFunEvals', 30000, 'MaxIter', 15000, 'TolX', 1e-5);
@@ -127,6 +132,7 @@ for sid = 1:nSubjects
         end
     end
     %%
+    % calculate some model performance metrics other than NLL
     for k = 1:nRuns
         clear -global predictions
         global predictions
@@ -145,6 +151,7 @@ for sid = 1:nSubjects
         fits(sid, k, end-2) = switchAcc;
     end
     
+    % find the best of the nRun fits
     thisSubj = squeeze(fits(sid,:,:));
     bestRun = find(thisSubj(:,end-5) == min(thisSubj(:,end-5)));
     bestRun = bestRun(1);
@@ -153,6 +160,7 @@ for sid = 1:nSubjects
     BIC(sid) = 2*NLL(sid) + nParams*log(nTrials(sid)); % BIC is already calculated using the correct number of parameters when using bias
 end
 
+% store and save everything
 results.allFits = fits;
 results.bestFits = bestFits;
 results.nParams = nParams;

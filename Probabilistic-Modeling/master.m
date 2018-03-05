@@ -1,18 +1,11 @@
 clear; clear global; clc;
 
-nRuns = 8;
-modelList = {
-    'full-noLapse';
-    'sizeOnly-noLapse';
-    'rewardOnly-noLapse';
-    'full-sameAlpha-noLapse';
-    };
-% modelList = {'dumbBias'};
+nRuns = 8; % how many times do you want to fit each model (try to avoid local minima)?
+runAllModels = 1; % do you want to fit all models or just a subset?
+fillNewSubjects = 1; % are there new (i.e., not yet fit) subjects in this dataset?
 
-fillNewSubjects = 1;
 
-runAllModels = 1;
-if runAllModels
+if runAllModels % iterate through all model names to generate list
     m1 = {'full'; 'sizeOnly'; 'rewardOnly'; 'full-sameAlpha'};
     m2 = {[]; '-holdKappa'};
     m3 = {[]; '-noLapse'};
@@ -24,12 +17,20 @@ if runAllModels
         m4ind = mod(ceil(m./4),2)+1;
         modelList{m} = [m1{m1ind} m2{m2ind} m3{m3ind} m4{m4ind}];
     end
-    modelList{m+1} = 'dumbSize';
+    modelList{m+1} = 'dumbSize'; % add in control models
     modelList{m+2} = 'dumbBias';
+else
+    modelList = { % select a subset of models to run
+    'full-noLapse';
+    'sizeOnly-noLapse';
+    'rewardOnly-noLapse';
+    'full-sameAlpha-noLapse';
+    };
 end
 
 nModelsToRun = length(modelList);
 
+% iterate through each model and fit it to subjects as needed
 for mid = 1:nModelsToRun
     try
         simpleInferenceWrapper(modelList{mid}, nRuns, fillNewSubjects)

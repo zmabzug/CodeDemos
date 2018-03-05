@@ -1,16 +1,18 @@
 clear; clear global; clc;
 
+% define data directories
 files = dir('fits-*.mat');
 nModels = length(files);
 names = {files.name}';
 subjectFilesOld = dir('../../Psychtoolbox/Results/Subjects/processed/*.mat');
 nSubjectsOld = length(subjectFilesOld);
 subjectFilesNew = dir('../../Psychtoolbox/JoystickResults/Subjects/*.mat');
-subjectFiles = [subjectFilesOld; subjectFilesNew];  %%%% change me back! %%%%
+subjectFiles = [subjectFilesOld; subjectFilesNew];
 nSubjectsNew = length(subjectFilesNew);
 
 nSubjects = length(subjectFiles);
 
+% load in models and relevant parameters
 for fid = 1:nModels
     load(files(fid).name);
     allFits{fid} = results;
@@ -21,7 +23,7 @@ for fid = 1:nModels
     clear results
 end
 
-%% extract biases
+%% extract biases to determine chance
 for sid = 1:nSubjects
     if sid<=nSubjectsOld
         data_dir = '../../Psychtoolbox/Results/Subjects/processed/';
@@ -59,7 +61,7 @@ sortedNames = {files(ind).name}';
 [indX5, indY5] = find(sortedBIC<5);
 [indX0, indY0] = find(sortedBIC==0);
 
-%%
+%% plot Bayesian model selection results
 figure(1)
 clf(1)
 for n=1:2
@@ -103,7 +105,7 @@ for n=1:2
     axR.YTickLabel = flipud(nParams(ind)');
     ylabel('nParams')
 end
-%% prediction improvement
+%% plot prediction improvement over chance
 figure(2)
 clf(2)
 predImp = maxPerf-repmat(ruleBias,nModels,1);
@@ -140,7 +142,7 @@ axR.YTick = 0.5:nModels;
 axR.YTickLabel = flipud(nParams(ind)');
 ylabel('nParams')
 
-%% best predImp for each subject
+%% look at best model for each subject irrespective of BMS results
 figure(3)
 clf(3)
 for n = 1:nSubjects
@@ -162,15 +164,10 @@ xlim([0.4 nSubjects+0.6])
 %% best models for different subsets of subjects
 figure(4)
 clf(4)
-%badBIC = BIC(:,[2 4 8 9]);
-%goodBIC = BIC(:, [1 3 5 6 7]);
+
 newBIC = BIC(:, 1:nSubjectsOld);
-%monkBIC = BIC(:, 1:nSubjectsOld);
 joyBIC = BIC(:, nSubjectsOld+1:end);
-%[abad,exp_nad,badxp,~,~] = spm_BMS((-1/2).*badBIC', [], [], [], [], 0.25*ones(1,nModels));
-%[agood,exp_good,goodxp,~,~] = spm_BMS((-1/2).*goodBIC', [], [], [], [], 0.25*ones(1,nModels));
 [anew,exp_new,newxp,~,~] = spm_BMS((-1/2).*newBIC', [], [], [], [], 0.25*ones(1,nModels));
-%[amonk,exp_monk,monkxp,~,~] = spm_BMS((-1/2).*monkBIC', [], [], [], [], 0.25*ones(1,nModels));
 [ajoy,exp_joy,joyxp,~,~] = spm_BMS((-1/2).*joyBIC', [], [], [], [], 0.25*ones(1,nModels));
 allxp = [newxp; joyxp];
 allxp = [exp_new; exp_joy];
@@ -199,7 +196,6 @@ biasKey = ~cellfun('isempty', strfind(myNames, 'useBias'));
 
 % type
 thisAlpha = anew(3:end);
-%thisAlpha = ajoy(3:end);
 alphaType = [sum(thisAlpha(typeKey==1)) sum(thisAlpha(typeKey==2)) sum(thisAlpha(typeKey==3)) sum(thisAlpha(typeKey==4))];
 xpType = spm_dirichlet_exceedance(alphaType,1e6);
 
@@ -212,7 +208,7 @@ xpKappa = spm_dirichlet_exceedance(alphaKappa,1e6);
 alphaBias = [sum(thisAlpha(biasKey==0)) sum(thisAlpha(biasKey==1))];
 xpBias = spm_dirichlet_exceedance(alphaBias,1e6);
 
-%%
+%% comparing lapse rates and model fits
 figure(5)
 clf(5)
 biased = ruleBias>.5;
@@ -254,14 +250,3 @@ xlim([0 6])
 xlabel('log_{10}(Variance) of NLL across Models')
 set(gca, 'FontSize', 16);
 pbaspect([1 1 1]);
-
-%% 
-GMM1p = fitgmdist(predMax(nSubjectsOld+1:end)', 1);
-GMM2p = fitgmdist(predMax(nSubjectsOld+1:end)', 2);
-GMM3p = fitgmdist(predMax(nSubjectsOld+1:end)', 3);
-perfGroupPred = posterior(GMM2p, predMax(nSubjectsOld+1:end)');
-
-GMM1r = fitgmdist(100*ruleBias(nSubjectsOld+1:end)', 1);
-GMM2r = fitgmdist(100*ruleBias(nSubjectsOld+1:end)', 2);
-%GMM3r = fitgmdist(ruleBias(nSubjectsOld+1:end)', 3);
-biasGroupPred = posterior(GMM2r, 100*ruleBias(nSubjectsOld+1:end)');

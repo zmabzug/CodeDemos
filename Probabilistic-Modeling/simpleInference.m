@@ -4,6 +4,7 @@ c = 1;
 useSize = 0;
 useRew = 0;
 
+% determine which parameters to fit based on params structure
 if ~isempty(strfind(params.type, 'both')) % double alpha and kappa if using both
     useSize = 1;
     useRew = 1;
@@ -54,7 +55,7 @@ if params.bias
     end
 end
 
-%%
+%% ensure compatibility across data sources
 if oldData % for compatibility with data from old task
     nRules = 2;
     rule = strcmp(data.ruleID, 'R1')+1;
@@ -67,7 +68,7 @@ nTrials = size(data,1);
 r = [0:nTrials-1];
 zeroTrials = zeros(nTrials,1);
 
-%% Size
+%% calculate probabilities based only on size information
 if useSize
     if oldData
         redSize = abs(data.sizeLeft - data.sizeRight);
@@ -80,12 +81,14 @@ if useSize
         blueSize = data.blueWidth;
     end
     
+    % implement learning and smoothing
     alphaVec = (alpha.*ones(length(nTrials))).^r;
     redSmoothed = tsmovavg([zeroTrials; redSize]', 'w', fliplr(alphaVec));
     redSmoothed = redSmoothed(nTrials:end-1) + redSize';
     greenSmoothed = tsmovavg([zeroTrials; greenSize]', 'w', fliplr(alphaVec));
     greenSmoothed = greenSmoothed(nTrials:end-1) + greenSize';
     
+    % calculate running estimate of mean
     redMean = redSmoothed./cumsum(alphaVec);
     greenMean = greenSmoothed./cumsum(alphaVec);
     
@@ -102,6 +105,7 @@ if useSize
         blueVar = cumsum((blueSize'-blueMean).^2)./(r+1);
     end
     
+    % calculate probabilities that one choice is more beneficial than others
     % p(r>g & r>b) = p(r>g)*p(g>b) + p(r>b)*p(b>g)
     if oldData
         rVSg = 1-normcdf(0, redMean-greenMean, sqrt(redVar + greenVar));
@@ -118,6 +122,7 @@ if useSize
         allProbs = [pRed' pGreen' pBlue'];
     end
     
+    % control explore/exploit tradeoff (kappa)
     allProbs = allProbs./repmat(sum(allProbs,2),1,nRules);
     allProbs(allProbs==0) = min(allProbs(allProbs>0)); % get rid of any potential zero probabilities
     allProbs = allProbs.^kappa;
@@ -127,33 +132,9 @@ if useSize
 else
     sizeProbs = ones(nTrials, nRules);
 end
-%% Reward
+%% calculate probabilities based only on reward
 if useRew
     betaVec = (beta.*ones(length(nTrials))).^r;
-    % if useGauss
-    %     redWins = zeros(size(data.perf)) + strcmp(data.chosenTarget, 'red').*(2.*data.perf - 1);
-    %     greenWins = zeros(size(data.perf)) + strcmp(data.chosenTarget, 'green').*(2.*data.perf - 1);
-    %     blueWins = zeros(size(data.perf)) + strcmp(data.chosenTarget, 'blue').*(2.*data.perf - 1);
-    %
-    %     redWinsSmoothed = tsmovavg([zeroSize; redWins]', 'w', fliplr(betaVec));
-    %     redWinsSmoothed = redWinsSmoothed(nTrials:end-1) + redWins';
-    %     greenWinsSmoothed = tsmovavg([zeroSize; greenWins]', 'w', fliplr(betaVec));
-    %     greenWinsSmoothed = greenWinsSmoothed(nTrials:end-1) + greenWins';
-    %     blueWinsSmoothed = tsmovavg([zeroSize; blueWins]', 'w', fliplr(betaVec));
-    %     blueWinsSmoothed = blueWinsSmoothed(nTrials:end-1) + blueWins';
-    %
-    %     rVSg = 1-normcdf(0, redWinsSmoothed-greenWinsSmoothed, 1);
-    %     rVSb = 1-normcdf(0, redWinsSmoothed-blueWinsSmoothed, 1);
-    %     gVSb = 1-normcdf(0, greenWinsSmoothed-blueWinsSmoothed, 1);
-    %     pRed = rVSg.*gVSb + rVSb.*(1-gVSb);
-    %     pGreen = (1-rVSg).*rVSb + gVSb.*(1-rVSb);
-    %     pBlue = (1-rVSb).*rVSg + (1-gVSb).*(1-rVSg);
-    %     allProbs = [pRed' pGreen' pBlue'];
-    %     allProbs = allProbs./repmat(sum(allProbs,2),1,3);
-    %     allProbs = allProbs.^lambda;
-    %     rewardProbs = allProbs./repmat(sum(allProbs,2),1,3);
-    %     clear allProbs
-    % else
     
     if oldData
         redAlpha = strcmp(data.ruleID, 'R0').*(data.reward==1);
@@ -169,6 +150,8 @@ if useRew
         blueBeta = strcmp(data.chosenTarget, 'blue').*(data.perf==0);
     end
     
+    % use beta distributions to estimate dynamics reward rates
+    % learning and smoothing
     redAlphaSmoothed = tsmovavg([zeroTrials; redAlpha]', 'w', fliplr(betaVec));
     redAlphaSmoothed = redAlphaSmoothed(nTrials:end-1) + redAlpha' + beta;
     redBetaSmoothed = tsmovavg([zeroTrials; redBeta]', 'w', fliplr(betaVec));
@@ -192,6 +175,7 @@ if useRew
         allProbs = [redEP' greenEP'];
     end
     
+    % control explore/exploit tradeoff (lambda)    
     allProbs = allProbs./repmat(sum(allProbs,2),1,nRules);
     allProbs(allProbs==0) = min(allProbs(allProbs>0)); % get rid of any potential zero probabilities
     allProbs = allProbs.^lambda;
@@ -202,7 +186,7 @@ else
     rewardProbs = ones(nTrials, nRules);
 end
 
-%% Bias
+%% determine bias
 if params.bias
     if oldData
         biasProbVec = [bias1 1-bias1];
@@ -215,13 +199,13 @@ else
     biasProbs = ones(nTrials, nRules);
 end
 
-%% decision
+%% integrate visual + outcome + bias + lapse
 allProbs = sizeProbs.*rewardProbs.*biasProbs;
 allProbs = [ones(1,nRules) ; allProbs(1:end-1, :)];
 allProbs = allProbs./repmat(sum(allProbs,2),1,nRules);
 allProbs = (1-lapse).*allProbs + lapse.*ones(nTrials,nRules)/nRules;
 
-%pCr = allProbs(:,1).*strcmp(data.chosenTarget, 'red') + allProbs(:,2).*strcmp(data.chosenTarget, 'green') + allProbs(:,3).*strcmp(data.chosenTarget, 'blue');
+% calculate NLL to be minimized
 pCr = diag(allProbs(:,rule));
 err = -sum(log(pCr));
 
@@ -231,6 +215,7 @@ end
 
 [~,preds] = max(allProbs, [], 2);
 
+% output variables if necessary
 if globalOutputs==1
     global predictions
     predictions = preds;
