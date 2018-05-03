@@ -3,8 +3,11 @@ This repository contains some samples of code that I've worked on over the years
 
 ## Table of Contents
 
+### Goodreads (Python)
+(*Work in progress*) This project uses collaborative filtering to suggest what books a reader may like based on book rating data from Goodreads (scraped from the web). This is highly similar to the famous "Netflix Prize", and requires using (book, user, rating) triplets to predict ratings for unknown book-user pairings. In particular, I'm using incremental singular value decomposition (SVD) to perform matrix factorization with missing data.
+
 ### rtidatascience-exercise1 (Python, SQL)
-(*Work in progress*) This exercise involves using Python and SQL to turn census data (stored in a normalized relation SQLite database) into a pandas dataframe, then analyze those data and build models to predict whether individuals make over $50,000/year. The README.md file (which describes the task quite comprehensively) and the SQLite database were both provided (courtesy of [the RTI Center for Data Science](https://www.rti.org/service-capability/data-science) in the exercise's Github folder [here](https://github.com/rtidatascience/data-scientist-exercise01).
+This exercise involves using Python and SQL to turn census data (stored in a normalized relation SQLite database) into a pandas dataframe, then analyze those data and build models to predict whether individuals make over $50,000/year. The README.md file (which describes the task quite comprehensively) and the SQLite database were both provided (courtesy of [the RTI Center for Data Science](https://www.rti.org/service-capability/data-science) in the exercise's Github folder [here](https://github.com/rtidatascience/data-scientist-exercise01).
 
 ### rtidatascience-exercise2 (Python)
 (*Work in progress*) This exercise involves using Python to extract and analyze aviation accident data from the National Transportation Safety Board (stored in XML and JSON files). The README.md file (which describes the task quite comprehensively) and the XML and JSON files were provided (courtesy of [the RTI Center for Data Science](https://www.rti.org/service-capability/data-science) in the exercise's Github folder [here](https://github.com/rtidatascience/data-scientist-exercise02).
